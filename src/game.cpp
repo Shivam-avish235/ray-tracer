@@ -96,12 +96,12 @@ void Game::render()
     glUseProgram(shader);
     glBindVertexArray(vao);
 
-    // glUniform2f(glGetUniformLocation(shader,"WINDOW"),(float)WINDOW_W, (float)WINDOW_H);
-    // glUniform2f(glGetUniformLocation(shader,"center"),360.0f, 360.0f);
-    // glUniform1f(glGetUniformLocation(shader,"radius"),300.0f);
+    glUniform2f(glGetUniformLocation(shader,"WINDOW"),(float)WINDOW_W, (float)WINDOW_H);
+    glUniform2f(glGetUniformLocation(shader,"center"),360.0f, 360.0f);
+    glUniform1f(glGetUniformLocation(shader,"radius"),300.0f);
 
     glUniform2f(glGetUniformLocation(shader, "WINDOW"), (float)WINDOW_W, (float)WINDOW_H);
-    glUniform3f(glGetUniformLocation(shader, "uCameraOrigin"), 0.0f, 0.0f, 0.0f);
+    glUniform3f(glGetUniformLocation(shader, "uCameraOrigin"), 0.0f, 0.0f, 2.0f);
     glUniform1f(glGetUniformLocation(shader, "uViewportHeight"), 2.0f);
     glUniform1f(glGetUniformLocation(shader, "uFocalLength"), 1.0f);
 
