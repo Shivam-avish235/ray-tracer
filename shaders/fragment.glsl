@@ -31,7 +31,11 @@ float hit_sphere(vec3 center, float radius, vec3 ray_origin, vec3 ray_dir) {
     float b = 2.0 * dot(oc, ray_dir);
     float c = dot(oc, oc) - radius * radius;
     float discriminant = b * b - 4.0 * a * c;
-    return discriminant;
+
+    if (discriminant < 0.0)
+        return -1.0;  
+    else
+        return (-b - sqrt(discriminant)) / (2.0 * a); 
 }
 
 
@@ -72,39 +76,27 @@ void main() {
 
 
     // --- Compute intersection ---
+
 float t_sphere = hit_sphere(sphere_center, radius, uCameraOrigin, ray_dir);
 
 
-    // --- Output color ---
 
-    if (t_sphere > 0.0) {
-        // Ray hit sphere
-        
-        FragColor = vec4(1.0, 0.0, 0.0, 1.0);  // Red sphere
-    } else {
-        // Background gradient 
+if (t_sphere > 0.0) {
+    // Compute hit point
+    vec3 hit_point = uCameraOrigin + t_sphere * ray_dir;
 
-        float t = 0.5 * (ray_dir.y + 1.0);
-        vec3 color = mix(vec3(1.0), vec3(0.5, 0.7, 1.0), t);
-        FragColor = vec4(color, 1.0);
-    }
+    // Compute surface normal
+    vec3 normal = normalize(hit_point - sphere_center);
 
+    // Map normal [-1, 1] to [0, 1] for color display
+    vec3 color = 0.5 * (normal + vec3(1.0));
 
-    // float r2 = normaliseOne(radius);
-    // vec2 c2 = corrditnateTOndc(center);
-
-    // float dist = distance(fPos,c2);
-
-    // if (dist <= r2)
-    //     FragColor = vec4(1.0, 0.0, 0.0, 1.0); 
-    // else
-    //     FragColor = vec4(0.0, 0.0, 0.0, 1.0); 
-
-    // float t = (fPos.y + 1.0) / 2.0;
-    // vec3 color = mix(vec3(1.0, 1.0, 1.0), vec3(0.5, 0.7, 1.0), t);
-    // FragColor = vec4(color, 2.0);
-
-
-
+    FragColor = vec4(color, 1.0);
+} 
+else {
+    float t = 0.5 * (ray_dir.y + 1.0);
+    vec3 color = mix(vec3(1.0), vec3(0.5, 0.7, 1.0), t);
+    FragColor = vec4(color, 1.0);
+}
 
 }
