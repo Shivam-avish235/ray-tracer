@@ -1,6 +1,7 @@
 #include "game.h"
 #include "shader_util.h"
 #include <iostream>
+#include "vec.h"
 #include <cmath> // for cosf(), sinf(), etc.
 
 // Define math constants if not provided by your compiler
@@ -175,10 +176,18 @@ void Game::render()
 
     glUseProgram(shader);
     glBindVertexArray(vao);
+    vec3 centers[] = {
+        {0.0f, 0.0f, -1.0f},   // main sphere
+        {0.0f, -100.5f, -1.0f} // ground sphere
+    };
+    float radii[] = {0.5f, 100.0f};
+
+    glUniform1i(glGetUniformLocation(shader, "sphere_count"), 2);
+    glUniform3fv(glGetUniformLocation(shader, "sphere_centers"), 2, (float *)centers);
+    glUniform1fv(glGetUniformLocation(shader, "sphere_radii"), 2, radii);
 
     glUniform2f(glGetUniformLocation(shader, "WINDOW"), (float)WINDOW_W, (float)WINDOW_H);
-    glUniform2f(glGetUniformLocation(shader, "center"), 360.0f, 360.0f);
-    glUniform1f(glGetUniformLocation(shader, "radius"), 300.0f);
+ 
 
     // --- Camera uniforms ---
     glUniform3f(glGetUniformLocation(shader, "uCameraOrigin"), cameraX, cameraY, cameraZ);
