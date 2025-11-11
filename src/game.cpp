@@ -2,6 +2,7 @@
 #include "shader_util.h"
 #include <iostream>
 #include "vec.h"
+
 #include <cmath> // for cosf(), sinf(), etc.
 
 // Define math constants if not provided by your compiler
@@ -182,6 +183,10 @@ void Game::render()
     };
     float radii[] = {0.5f, 100.0f};
 
+    static int frame = 0;
+    glUniform1f(glGetUniformLocation(shader , "uFrame"),(float)frame);
+    frame++;
+
     glUniform1i(glGetUniformLocation(shader, "sphere_count"), 2);
     glUniform3fv(glGetUniformLocation(shader, "sphere_centers"), 2, (float *)centers);
     glUniform1fv(glGetUniformLocation(shader, "sphere_radii"), 2, radii);
@@ -193,8 +198,7 @@ void Game::render()
     glUniform3f(glGetUniformLocation(shader, "uCameraOrigin"), cameraX, cameraY, cameraZ);
     glUniform1f(glGetUniformLocation(shader, "uViewportHeight"), 2.0f);
     glUniform1f(glGetUniformLocation(shader, "uFocalLength"), 1.0f);
-    glUniform1f(glGetUniformLocation(shader, "uYaw"), yaw);
-    glUniform1f(glGetUniformLocation(shader, "uPitch"), pitch);
+
 
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
     SDL_GL_SwapWindow(window);
