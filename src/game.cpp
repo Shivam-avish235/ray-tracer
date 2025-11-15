@@ -12,6 +12,9 @@
 #ifndef M_PI_2
 #define M_PI_2 1.57079632679489661923
 #endif
+#define MAT_LAMBERTIAN 0
+#define MAT_METAL 1
+#define MAT_DIELECTRIC 2
 
 float vertices[] = {
     -1.0f, 1.0f, // top-left
@@ -61,6 +64,7 @@ bool Game::init(const char *title)
         return false;
     }
 
+    
     // --- Create the vertex buffer and array objects ---
     glGenVertexArrays(1, &vao);
     glGenBuffers(1, &vbo);
@@ -136,25 +140,25 @@ void Game::update()
     // --- Keyboard movement ---
     if (keys[SDL_SCANCODE_W])
     {
-        cameraX += frontX * velocity;
-        cameraY += frontY * velocity;
-        cameraZ += frontZ * velocity;
+        cameraPos.x += frontX * velocity;
+        cameraPos.y += frontY * velocity;
+        cameraPos.z += frontZ * velocity;
     }
     if (keys[SDL_SCANCODE_S])
     {
-        cameraX -= frontX * velocity;
-        cameraY -= frontY * velocity;
-        cameraZ -= frontZ * velocity;
+        cameraPos.x -= frontX * velocity;
+        cameraPos.y -= frontY * velocity;
+        cameraPos.z -= frontZ * velocity;
     }
     if (keys[SDL_SCANCODE_A])
     {
-        cameraX -= cosf(yawRad - M_PI_2) * velocity;
-        cameraZ -= sinf(yawRad - M_PI_2) * velocity;
+        cameraPos.x -= cosf(yawRad - M_PI_2) * velocity;
+        cameraPos.z -= sinf(yawRad - M_PI_2) * velocity;
     }
     if (keys[SDL_SCANCODE_D])
     {
-        cameraX += cosf(yawRad - M_PI_2) * velocity;
-        cameraZ += sinf(yawRad - M_PI_2) * velocity;
+        cameraPos.x += cosf(yawRad - M_PI_2) * velocity;
+        cameraPos.z += sinf(yawRad - M_PI_2) * velocity;
     }
 
     // --- FPS Counter ---
@@ -163,7 +167,7 @@ void Game::update()
     if (currentTime - fpsTimer >= 1000)
     {
         std::cout << "FPS: " << frameCount
-                  << " | Camera: (" << cameraX << ", " << cameraY << ", " << cameraZ << ")"
+                  << " | Camera: (" << cameraPos.x << ", " << cameraPos.y << ", " << cameraPos.z << ")"
                   << " | Yaw: " << yaw << " | Pitch: " << pitch << "\n";
         frameCount = 0;
         fpsTimer = currentTime;
@@ -172,33 +176,82 @@ void Game::update()
 
 void Game::render()
 {
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-
     glUseProgram(shader);
     glBindVertexArray(vao);
-    vec3 centers[] = {
-        {0.0f, 0.0f, -1.0f},   // main sphere
-        {0.0f, -100.5f, -1.0f} // ground sphere
-    };
-    float radii[] = {0.5f, 100.0f};
 
-    static int frame = 0;
-    glUniform1f(glGetUniformLocation(shader , "uFrame"),(float)frame);
-    frame++;
+    // --- SPHERES ---
+  vec3 centers[5] = {
+    vec3(0.0f, 0.0f, -1.0f),      // Sphere 0
+    vec3(-1.0f, 0.0f, -1.5f),     // Sphere 1
+    vec3(1.0f, 0.2f, -2.0f),      // Sphere 2
+    vec3(0.5f, -0.2f, -0.5f),     // Sphere 3
+    vec3(0.0f, -100.5f, -1.0f),   // Ground sphere
+};
 
+   float radii[5] = {
+    0.5f,   // normal sphere
+    0.4f,
+    0.3f,
+    0.2f,
+    100.0f  // ground plane
+};
     glUniform1i(glGetUniformLocation(shader, "sphere_count"), 2);
     glUniform3fv(glGetUniformLocation(shader, "sphere_centers"), 2, (float *)centers);
     glUniform1fv(glGetUniformLocation(shader, "sphere_radii"), 2, radii);
 
-    glUniform2f(glGetUniformLocation(shader, "WINDOW"), (float)WINDOW_W, (float)WINDOW_H);
- 
+    // --- MATERIALS ---
+   int materials[5] = {
+    MAT_LAMBERTIAN,  // Sphere 0
+    MAT_METAL,       // Sphere 1
+    MAT_DIELECTRIC,  // Sphere 2
+    MAT_METAL,       // Sphere 3
+    MAT_LAMBERTIAN   // Ground
+};
 
-    // --- Camera uniforms ---
-    glUniform3f(glGetUniformLocation(shader, "uCameraOrigin"), cameraX, cameraY, cameraZ);
+  vec3 albedo[5] = {
+    vec3(0.8f, 0.3f, 0.3f),  // red lambertian
+    vec3(0.8f, 0.8f, 0.8f),  // silver metal
+    vec3(1.0f, 1.0f, 1.0f),  // glass (ignored)
+    vec3(0.7f, 0.7f, 0.2f),  // gold metal
+    vec3(0.8f, 0.8f, 0.0f)   // ground
+};
+
+    float fuzz[5] = {
+    0.0f,   // lambertian
+    0.1f,   // metal (slightly blurry)
+    0.0f,   // glass (ignored)
+    0.3f,   // fuzzy gold metal
+    0.0f
+};
+float ref_idx[5] = {
+    0.0f,
+    0.0f,
+    1.5f,  // glass
+    0.0f,
+    0.0f
+};
+
+glUniform1i(glGetUniformLocation(shader, "sphere_count"), 5);
+glUniform3fv(glGetUniformLocation(shader, "sphere_centers"), 5, (float*)centers);
+glUniform1fv(glGetUniformLocation(shader, "sphere_radii"), 5, radii);
+
+glUniform1iv(glGetUniformLocation(shader, "sphere_material"), 5, materials);
+glUniform3fv(glGetUniformLocation(shader, "sphere_albedo"), 5, (float*)albedo);
+glUniform1fv(glGetUniformLocation(shader, "sphere_fuzz"), 5, fuzz);
+glUniform1fv(glGetUniformLocation(shader, "sphere_ref_idx"), 5, ref_idx);
+
+
+    // --- FRAME COUNTER ---
+    static int frame = 0;
+    glUniform1f(glGetUniformLocation(shader, "uFrame"), frame++);
+    
+    // --- WINDOW + CAMERA ---
+    glUniform2f(glGetUniformLocation(shader, "WINDOW"), WINDOW_W, WINDOW_H);
+    glUniform3f(glGetUniformLocation(shader, "uCameraOrigin"),
+                cameraPos.x, cameraPos.y, cameraPos.z);
     glUniform1f(glGetUniformLocation(shader, "uViewportHeight"), 2.0f);
     glUniform1f(glGetUniformLocation(shader, "uFocalLength"), 1.0f);
-
 
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
     SDL_GL_SwapWindow(window);
