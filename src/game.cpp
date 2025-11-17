@@ -252,6 +252,8 @@ glUniform1fv(glGetUniformLocation(shader, "sphere_ref_idx"), 5, ref_idx);
                 cameraPos.x, cameraPos.y, cameraPos.z);
     glUniform1f(glGetUniformLocation(shader, "uViewportHeight"), 2.0f);
     glUniform1f(glGetUniformLocation(shader, "uFocalLength"), 1.0f);
+    glUniform1f(glGetUniformLocation(shader, "uYaw"), yaw);
+    glUniform1f(glGetUniformLocation(shader, "uPitch"), pitch);
 
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
     SDL_GL_SwapWindow(window);

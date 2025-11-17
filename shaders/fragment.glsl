@@ -7,6 +7,11 @@ uniform float uViewportHeight;
 uniform float uFocalLength;
 uniform float uFrame;
 
+// --- ADDED UNIFORMS ---
+uniform float uYaw;
+uniform float uPitch;
+// ------------------------
+
 #define MAX_SPHERES 32
 #define MAX_DEPTH 32
 
@@ -96,7 +101,6 @@ bool scatter_dielectric(vec3 rd, vec3 p, vec3 normal, vec2 seed, float ref_idx,
     vec3 outward_normal;
     float ni_over_nt;
     float cosine;
-
     if (dt > 0.0) {
         outward_normal = -normal;
         ni_over_nt = ref_idx;
@@ -109,12 +113,11 @@ bool scatter_dielectric(vec3 rd, vec3 p, vec3 normal, vec2 seed, float ref_idx,
 
     vec3 refracted = refract(unit_dir, outward_normal, ni_over_nt);
     float reflect_prob;
-
     if (length(refracted) > 0.001)
         reflect_prob = schlick(cosine, ref_idx);
     else
         reflect_prob = 1.0;
-
+    
     if (rand(seed) < reflect_prob)
         scattered = reflect_vec(unit_dir, normal);
     else
@@ -123,23 +126,53 @@ bool scatter_dielectric(vec3 rd, vec3 p, vec3 normal, vec2 seed, float ref_idx,
     return true;
 }
 
+// --- ADDED ROTATION FUNCTION ---
+    mat3 buildCameraMatrix(float yaw, float pitch) {
+    float yawRad = radians(yaw);
+    float pitchRad = radians(pitch);
+
+    vec3 front;
+    front.x = cos(yawRad) * cos(pitchRad);
+    front.y = sin(pitchRad);
+    front.z = sin(yawRad) * cos(pitchRad);
+    front = normalize(front);
+    
+    vec3 worldUp = vec3(0.0, 1.0, 0.0);
+    vec3 right = normalize(cross(front, worldUp));
+    vec3 up = normalize(cross(right, front)); 
+
+    // Creates a matrix to transform from view-space (looking down -Z) to world-space
+    return mat3(right, up, front);
+}
+
+
+
 // ---------------- Main ----------------
 void main()
 {
     float aspect = WINDOW.x / WINDOW.y;
     float viewport_width = uViewportHeight * aspect;
 
+    // 1. Calculate base viewport vectors (as if looking down -Z at origin)
     vec3 horizontal = vec3(viewport_width, 0.0, 0.0);
     vec3 vertical   = vec3(0.0, uViewportHeight, 0.0);
-    vec3 lower_left = uCameraOrigin
-                    - horizontal * 0.5
-                    - vertical * 0.5
-                    - vec3(0, 0, uFocalLength);
-
+    vec3 lower_left_corner = vec3(0.0, 0.0, -uFocalLength) // Start from focal plane
+                           - horizontal * 0.5
+                           - vertical * 0.5;
+    
     vec2 uv = (gl_FragCoord.xy / WINDOW) ;
-    vec3 ro = uCameraOrigin;
-    vec3 rd = normalize(lower_left + uv.x * horizontal + uv.y * vertical - uCameraOrigin);
+    
+    // 2. Get un-rotated ray direction (from origin to pixel on viewport)
+    vec3 rd_local = normalize(lower_left_corner + uv.x * horizontal + uv.y * vertical);
 
+    // 3. Build rotation matrix from yaw and pitch
+    mat3 cameraMatrix = buildCameraMatrix(uYaw, uPitch);
+
+    // 4. Rotate the ray direction and set the ray origin
+    vec3 ro = uCameraOrigin;
+    vec3 rd = cameraMatrix * rd_local; // Apply rotation
+
+    // --- Original ray tracing logic follows ---
     vec3 throughput = vec3(1.0);
     vec3 final_color = vec3(0.0);
 
@@ -185,11 +218,11 @@ void main()
             ok = scatter_metal(rd, p, normal, seed, albedo, fuzz, attenuation, scattered);
         else
             ok = scatter_dielectric(rd, p, normal, seed, ref_idx, attenuation, scattered);
-
+        
         if (!ok) break;
 
         throughput *= attenuation;
-        ro = p + normal * 0.001;
+        ro = p + normal * 0.001; // Epsilon offset
         rd = scattered;
     }
 
