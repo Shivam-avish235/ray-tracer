@@ -1,34 +1,36 @@
 #include "game.h"
 #include "shader_util.h"
 #include <iostream>
+#include <random>
 #include "vec.h"
 
-#include <cmath> // for cosf(), sinf(), etc.
+#include <cmath>
 
-// Define math constants if not provided by your compiler
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 #ifndef M_PI_2
 #define M_PI_2 1.57079632679489661923
 #endif
+
 #define MAT_LAMBERTIAN 0
 #define MAT_METAL 1
 #define MAT_DIELECTRIC 2
 
+// Full-screen quad (2D positions only)
 float vertices[] = {
-    -1.0f, 1.0f, // top-left
-    1.0f, 1.0f,  // top-right
-    1.0f, -1.0f, // bottom-right
-    -1.0f, -1.0f // bottom-left
+    -1.0f,  1.0f,
+     1.0f,  1.0f,
+     1.0f, -1.0f,
+    -1.0f, -1.0f
 };
 
-unsigned int indices[] = {0, 1, 2, 2, 3, 0};
+unsigned int indices[] = {0,1,2, 2,3,0};
 
 Game::Game(int W_W, int W_H)
 {
-    WINDOW_H = W_H;
     WINDOW_W = W_W;
+    WINDOW_H = W_H;
 }
 
 Game::~Game() {}
@@ -44,9 +46,6 @@ bool Game::init(const char *title)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-
-    // Disable libdecor warning under Wayland
-    SDL_SetHint(SDL_HINT_VIDEO_WAYLAND_ALLOW_LIBDECOR, "0");
 
     window = SDL_CreateWindow(title, WINDOW_W, WINDOW_H, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     if (!window)
@@ -64,8 +63,7 @@ bool Game::init(const char *title)
         return false;
     }
 
-    
-    // --- Create the vertex buffer and array objects ---
+    // --- Create VBO / VAO / EBO ---
     glGenVertexArrays(1, &vao);
     glGenBuffers(1, &vbo);
     glGenBuffers(1, &ebo);
@@ -76,6 +74,7 @@ bool Game::init(const char *title)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
+    // attribute 0 = position (vec2)
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
@@ -84,8 +83,11 @@ bool Game::init(const char *title)
 
     shader = LoadShader("shaders/vertex.glsl", "shaders/fragment.glsl");
 
-    // Capture mouse for camera look (SDL3)
+    // Capture mouse for camera look
     SDL_SetWindowRelativeMouseMode(window, true);
+
+    // Build the final random scene once (deterministic)
+    buildFinalScene();
 
     lastTime = SDL_GetTicks();
     frameCount = 0;
@@ -103,7 +105,7 @@ void Game::handleEvent()
             isRunning = false;
         }
 
-        // --- Mouse look (yaw/pitch) ---
+        // Mouse look
         if (e.type == SDL_EVENT_MOUSE_MOTION)
         {
             float xoffset = e.motion.xrel * mouseSensitivity;
@@ -112,10 +114,8 @@ void Game::handleEvent()
             yaw += xoffset;
             pitch += yoffset;
 
-            if (pitch > 89.0f)
-                pitch = 89.0f;
-            if (pitch < -89.0f)
-                pitch = -89.0f;
+            if (pitch > 89.0f) pitch = 89.0f;
+            if (pitch < -89.0f) pitch = -89.0f;
         }
     }
 }
@@ -123,7 +123,7 @@ void Game::handleEvent()
 void Game::update()
 {
     const bool *keys = SDL_GetKeyboardState(NULL);
-    float deltaTime = 0.016f; // default 60 FPS fallback
+    float deltaTime = 0.016f;
     static Uint64 prevTime = SDL_GetTicks();
     Uint64 currentTime = SDL_GetTicks();
     deltaTime = (currentTime - prevTime) / 1000.0f;
@@ -137,7 +137,7 @@ void Game::update()
     float frontY = sinf(pitchRad);
     float frontZ = sinf(yawRad) * cosf(pitchRad);
 
-    // --- Keyboard movement ---
+    // Keyboard movement
     if (keys[SDL_SCANCODE_W])
     {
         cameraPos.x += frontX * velocity;
@@ -161,7 +161,7 @@ void Game::update()
         cameraPos.z += sinf(yawRad - M_PI_2) * velocity;
     }
 
-    // --- FPS Counter ---
+    // FPS counter
     frameCount++;
     static Uint64 fpsTimer = currentTime;
     if (currentTime - fpsTimer >= 1000)
@@ -180,81 +180,143 @@ void Game::render()
     glUseProgram(shader);
     glBindVertexArray(vao);
 
-    // --- SPHERES ---
-  vec3 centers[5] = {
-    vec3(0.0f, 0.0f, -1.0f),      // Sphere 0
-    vec3(-1.0f, 0.0f, -1.5f),     // Sphere 1
-    vec3(1.0f, 0.2f, -2.0f),      // Sphere 2
-    vec3(0.5f, -0.2f, -0.5f),     // Sphere 3
-    vec3(0.0f, -100.5f, -1.0f),   // Ground sphere
-};
+    // Upload cached scene (make sure we don't send more than shader supports)
+    int send_count = scene_count;
+    if (send_count > 512) send_count = 512; // match shader MAX_SPHERES
 
-   float radii[5] = {
-    0.5f,   // normal sphere
-    0.4f,
-    0.3f,
-    0.2f,
-    100.0f  // ground plane
-};
-    glUniform1i(glGetUniformLocation(shader, "sphere_count"), 2);
-    glUniform3fv(glGetUniformLocation(shader, "sphere_centers"), 2, (float *)centers);
-    glUniform1fv(glGetUniformLocation(shader, "sphere_radii"), 2, radii);
+    glUniform1i(glGetUniformLocation(shader, "sphere_count"), send_count);
+    // scene_centers is vector<vec3>, contiguous in memory - cast to float*
+    glUniform3fv(glGetUniformLocation(shader, "sphere_centers"), send_count, reinterpret_cast<const float*>(scene_centers.data()));
+    glUniform1fv(glGetUniformLocation(shader, "sphere_radii"), send_count, scene_radii.data());
+    glUniform1iv(glGetUniformLocation(shader, "sphere_material"), send_count, scene_material.data());
+    glUniform3fv(glGetUniformLocation(shader, "sphere_albedo"), send_count, reinterpret_cast<const float*>(scene_albedo.data()));
+    glUniform1fv(glGetUniformLocation(shader, "sphere_fuzz"), send_count, scene_fuzz.data());
+    glUniform1fv(glGetUniformLocation(shader, "sphere_ref_idx"), send_count, scene_ref_idx.data());
 
-    // --- MATERIALS ---
-   int materials[5] = {
-    MAT_LAMBERTIAN,  // Sphere 0
-    MAT_METAL,       // Sphere 1
-    MAT_DIELECTRIC,  // Sphere 2
-    MAT_METAL,       // Sphere 3
-    MAT_LAMBERTIAN   // Ground
-};
+    // --- Camera uniforms (book camera using yaw/pitch->lookAt) ---
+    float yawRad = yaw * M_PI / 180.0f;
+    float pitchRad = pitch * M_PI / 180.0f;
+    vec3 forward;
+    forward.x = cosf(yawRad) * cosf(pitchRad);
+    forward.y = sinf(pitchRad);
+    forward.z = sinf(yawRad) * cosf(pitchRad);
 
-  vec3 albedo[5] = {
-    vec3(0.8f, 0.3f, 0.3f),  // red lambertian
-    vec3(0.8f, 0.8f, 0.8f),  // silver metal
-    vec3(1.0f, 1.0f, 1.0f),  // glass (ignored)
-    vec3(0.7f, 0.7f, 0.2f),  // gold metal
-    vec3(0.8f, 0.8f, 0.0f)   // ground
-};
+    vec3 cameraTarget = cameraPos + forward;
 
-    float fuzz[5] = {
-    0.0f,   // lambertian
-    0.1f,   // metal (slightly blurry)
-    0.0f,   // glass (ignored)
-    0.3f,   // fuzzy gold metal
-    0.0f
-};
-float ref_idx[5] = {
-    0.0f,
-    0.0f,
-    1.5f,  // glass
-    0.0f,
-    0.0f
-};
-
-glUniform1i(glGetUniformLocation(shader, "sphere_count"), 5);
-glUniform3fv(glGetUniformLocation(shader, "sphere_centers"), 5, (float*)centers);
-glUniform1fv(glGetUniformLocation(shader, "sphere_radii"), 5, radii);
-
-glUniform1iv(glGetUniformLocation(shader, "sphere_material"), 5, materials);
-glUniform3fv(glGetUniformLocation(shader, "sphere_albedo"), 5, (float*)albedo);
-glUniform1fv(glGetUniformLocation(shader, "sphere_fuzz"), 5, fuzz);
-glUniform1fv(glGetUniformLocation(shader, "sphere_ref_idx"), 5, ref_idx);
-
-
-    // --- FRAME COUNTER ---
-    static int frame = 0;
-    glUniform1f(glGetUniformLocation(shader, "uFrame"), frame++);
-    
-    // --- WINDOW + CAMERA ---
-    glUniform2f(glGetUniformLocation(shader, "WINDOW"), WINDOW_W, WINDOW_H);
     glUniform3f(glGetUniformLocation(shader, "uCameraOrigin"),
                 cameraPos.x, cameraPos.y, cameraPos.z);
-    glUniform1f(glGetUniformLocation(shader, "uViewportHeight"), 2.0f);
-    glUniform1f(glGetUniformLocation(shader, "uFocalLength"), 1.0f);
-    glUniform1f(glGetUniformLocation(shader, "uYaw"), yaw);
-    glUniform1f(glGetUniformLocation(shader, "uPitch"), pitch);
 
+    glUniform3f(glGetUniformLocation(shader, "uLookAt"),
+                cameraTarget.x, cameraTarget.y, cameraTarget.z);
+
+    glUniform3f(glGetUniformLocation(shader, "uUp"), 0.0f, 1.0f, 0.0f);
+
+    // Focus distance: distance camera -> target (book-like default)
+    float focusDist = sqrtf((cameraTarget.x - cameraPos.x)*(cameraTarget.x - cameraPos.x) +
+                            (cameraTarget.y - cameraPos.y)*(cameraTarget.y - cameraPos.y) +
+                            (cameraTarget.z - cameraPos.z)*(cameraTarget.z - cameraPos.z));
+
+    // Defocus angle (degrees) — tweak to control blur size (book uses 0.6 for final image)
+    float defocusAngle = 0.6f;
+
+    glUniform1f(glGetUniformLocation(shader, "uFOV"), 20.0f); // final scene book uses ~20
+    glUniform1f(glGetUniformLocation(shader, "uFocusDist"), focusDist);
+    glUniform1f(glGetUniformLocation(shader, "uDefocusAngle"), defocusAngle);
+
+    // frame and window
+    static int frame = 0;
+    glUniform1f(glGetUniformLocation(shader, "uFrame"), (float)frame++);
+    glUniform2f(glGetUniformLocation(shader, "WINDOW"), (float)WINDOW_W, (float)WINDOW_H);
+
+    // draw fullscreen quad
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
     SDL_GL_SwapWindow(window);
+}
+
+// Build the final random world once
+void Game::buildFinalScene()
+{
+    scene_centers.clear();
+    scene_radii.clear();
+    scene_material.clear();
+    scene_albedo.clear();
+    scene_fuzz.clear();
+    scene_ref_idx.clear();
+
+    std::mt19937 rng(1337); // fixed seed => deterministic
+    std::uniform_real_distribution<float> rnd01(0.0f, 1.0f);
+
+    // ground
+    scene_centers.emplace_back(0.0f, -1000.0f, 0.0f);
+    scene_radii.push_back(1000.0f);
+    scene_material.push_back(MAT_LAMBERTIAN);
+    scene_albedo.emplace_back(0.5f, 0.5f, 0.5f);
+    scene_fuzz.push_back(0.0f);
+    scene_ref_idx.push_back(0.0f);
+
+    // small random spheres
+    for (int a = -11; a < 11; ++a) {
+        for (int b = -11; b < 11; ++b) {
+            float choose_mat = rnd01(rng);
+            float cx = a + 0.9f * rnd01(rng);
+            float cz = b + 0.9f * rnd01(rng);
+            vec3 center(cx, 0.2f, cz);
+            if (length(center - vec3(4.0f, 0.2f, 0.0f)) <= 0.9f) continue;
+
+            if (choose_mat < 0.8f) {
+                // diffuse
+                scene_material.push_back(MAT_LAMBERTIAN);
+                vec3 acol(rnd01(rng)*rnd01(rng), rnd01(rng)*rnd01(rng), rnd01(rng)*rnd01(rng));
+                scene_albedo.push_back(acol);
+                scene_fuzz.push_back(0.0f);
+                scene_ref_idx.push_back(0.0f);
+                scene_centers.push_back(center);
+                scene_radii.push_back(0.2f);
+            } else if (choose_mat < 0.95f) {
+                // metal
+                scene_material.push_back(MAT_METAL);
+                vec3 acol(0.5f + 0.5f*rnd01(rng), 0.5f + 0.5f*rnd01(rng), 0.5f + 0.5f*rnd01(rng));
+                scene_albedo.push_back(acol);
+                scene_fuzz.push_back(0.5f * rnd01(rng));
+                scene_ref_idx.push_back(0.0f);
+                scene_centers.push_back(center);
+                scene_radii.push_back(0.2f);
+            } else {
+                // glass
+                scene_material.push_back(MAT_DIELECTRIC);
+                scene_albedo.push_back(vec3(1.0f, 1.0f, 1.0f));
+                scene_fuzz.push_back(0.0f);
+                scene_ref_idx.push_back(1.5f);
+                scene_centers.push_back(center);
+                scene_radii.push_back(0.2f);
+            }
+        }
+    }
+
+    // three big spheres
+    // glass
+    scene_centers.push_back(vec3(0.0f, 1.0f, 0.0f));
+    scene_radii.push_back(1.0f);
+    scene_material.push_back(MAT_DIELECTRIC);
+    scene_albedo.push_back(vec3(1.0f,1.0f,1.0f));
+    scene_fuzz.push_back(0.0f);
+    scene_ref_idx.push_back(1.5f);
+
+    // lambertian
+    scene_centers.push_back(vec3(-4.0f, 1.0f, 0.0f));
+    scene_radii.push_back(1.0f);
+    scene_material.push_back(MAT_LAMBERTIAN);
+    scene_albedo.push_back(vec3(0.4f,0.2f,0.1f));
+    scene_fuzz.push_back(0.0f);
+    scene_ref_idx.push_back(0.0f);
+
+    // metal
+    scene_centers.push_back(vec3(4.0f, 1.0f, 0.0f));
+    scene_radii.push_back(1.0f);
+    scene_material.push_back(MAT_METAL);
+    scene_albedo.push_back(vec3(0.7f,0.6f,0.5f));
+    scene_fuzz.push_back(0.0f);
+    scene_ref_idx.push_back(0.0f);
+
+    scene_count = (int)scene_centers.size();
 }

@@ -4,7 +4,8 @@
 #include <SDL3/SDL.h>
 #include <glad/glad.h>
 #include <iostream>
-#include "vec.h"       // make sure vec3 is defined here
+#include <vector>
+#include "vec.h"
 
 class Game
 {
@@ -19,32 +20,51 @@ public:
     bool running() { return isRunning; }
 
 private:
-    // --- CAMERA ---
-    vec3 cameraPos = vec3(0.0f, 0.0f, 0.0f);   
+
+    // -------------------
+    // CAMERA DATA
+    // -------------------
+    vec3 cameraPos = vec3(0.0f, 0.0f, 3.0f);
     float yaw = -90.0f;
     float pitch = 0.0f;
-    float moveSpeed = 2.5f;
+    float moveSpeed = 3.0f;
     float mouseSensitivity = 0.1f;
 
-    // --- MOUSE ---
-    bool firstMouse = true;
-    float lastX = 0.0f;
-    float lastY = 0.0f;
-
-    // --- TIMING ---
+    // -------------------
+    // TIME
+    // -------------------
     Uint64 lastTime = 0;
     int frameCount = 0;
 
-    // --- SDL + OPENGL ---
+    // -------------------
+    // SDL
+    // -------------------
     SDL_Window *window = nullptr;
     SDL_GLContext context = nullptr;
 
-    int WINDOW_W, WINDOW_H;
+    int WINDOW_W;
+    int WINDOW_H;
     bool isRunning = false;
 
-    // --- GPU Resources ---
-    GLuint shader;
-    GLuint vao, vbo, ebo;
+    // -------------------
+    // OpenGL Resources
+    // -------------------
+    GLuint shader = 0;
+    GLuint vao = 0;
+    GLuint vbo = 0;
+    GLuint ebo = 0;
+
+    // -------------------
+    // Scene storage (built once)
+    // -------------------
+    void buildFinalScene();
+    int scene_count = 0;
+    std::vector<vec3> scene_centers;
+    std::vector<float> scene_radii;
+    std::vector<int> scene_material;
+    std::vector<vec3> scene_albedo;
+    std::vector<float> scene_fuzz;
+    std::vector<float> scene_ref_idx;
 };
 
 #endif
