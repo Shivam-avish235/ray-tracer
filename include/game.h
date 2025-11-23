@@ -46,17 +46,13 @@ private:
     int WINDOW_H;
     bool isRunning = false;
 
-    // -------------------
-    // OpenGL Resources
-    // -------------------
+
     GLuint shader = 0;
     GLuint vao = 0;
     GLuint vbo = 0;
     GLuint ebo = 0;
 
-    // -------------------
-    // Scene storage (built once)
-    // -------------------
+   
     void buildFinalScene();
     int scene_count = 0;
     std::vector<vec3> scene_centers;

@@ -8,7 +8,7 @@ uniform vec3 uCameraOrigin;
 uniform vec3 uLookAt;
 uniform vec3 uUp;
 uniform float uFOV;
-uniform vec2 uSeed;         // Varies every frame from C++
+uniform vec2 uSeed;         // Varies every frame 
 uniform int uMaxDepth;
 
 // Defocus blur
