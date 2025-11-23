@@ -1,11 +1,11 @@
 #include"game.h"
 
-Game game(1080, 720);
+Game game(1920, 1080);
 
 int main()
 {
 
-    if(!game.init("Ray tracer")){
+    if(!game.init("Ray tracer")){   
         return -1;
     }
 
